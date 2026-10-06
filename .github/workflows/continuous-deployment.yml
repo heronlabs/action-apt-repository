@@ -1,0 +1,36 @@
+name: 'Continuous Deployment'
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      semantic:
+        description: The SEMVER specification.
+        required: true
+        type: choice
+        default: patch
+        options:
+          - 'major'
+          - 'minor'
+          - 'patch'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: heronlabs/action-tag-release-build@v7
+        with:
+          ghToken: ${{ github.token }}
+          semantic: ${{ inputs.semantic }}

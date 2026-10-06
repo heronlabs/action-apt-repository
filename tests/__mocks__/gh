@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Minimal `gh` stub for action-apt-repository offline tests.
+#
+# Emulates only the gh surface the action uses:
+#   gh release download TAG --repo REPO --pattern PATTERN --dir DIR
+#       -> asserts REPO == $GH_EXPECT_REPO, PATTERN == $GH_EXPECT_PATTERN and
+#          GH_TOKEN == $GH_EXPECT_TOKEN (the token must arrive through the
+#          environment, never argv), then copies every file of $GH_RELEASE_DIR
+#          (the release assets) whose name matches PATTERN into DIR.
+#          No match copies nothing and exits 0: the script must notice by itself.
+#
+# A failed assertion exits 2 with a `gh stub:` message. Every invocation is
+# appended (one line, full argv) to $GH_LOG. No network, no real GitHub.
+set -euo pipefail
+
+: "${GH_LOG:?GH_LOG must point at a log file}"
+
+printf 'gh %s\n' "$*" >>"$GH_LOG"
+
+fail() { printf 'gh stub: %s\n' "$*" >&2; exit 2; }
+
+[ "${1:-} ${2:-}" = "release download" ] || fail "unhandled argv: $*"
+
+repo=""
+pattern=""
+dir=""
+shift 3
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --repo) repo="$2"; shift 2 ;;
+    --pattern) pattern="$2"; shift 2 ;;
+    --dir) dir="$2"; shift 2 ;;
+    *) fail "unexpected argument: $1" ;;
+  esac
+done
+
+[ "$repo" = "${GH_EXPECT_REPO:?}" ] || fail "--repo '$repo', expected '$GH_EXPECT_REPO'"
+[ "$pattern" = "${GH_EXPECT_PATTERN:?}" ] || fail "--pattern '$pattern', expected '$GH_EXPECT_PATTERN'"
+[ -n "$dir" ] || fail "--dir missing"
+[ "${GH_TOKEN:-}" = "${GH_EXPECT_TOKEN:?}" ] || fail "GH_TOKEN is not the expected token"
+
+mkdir -p "$dir"
+for asset in "${GH_RELEASE_DIR:?}"/*; do
+  [ -f "$asset" ] || continue
+  # shellcheck disable=SC2254  # PATTERN is a glob on purpose, like gh's --pattern
+  case "${asset##*/}" in $pattern) cp "$asset" "$dir/" ;; esac
+done

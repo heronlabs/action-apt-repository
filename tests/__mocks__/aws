@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Minimal `aws` stub for action-apt-repository offline tests.
+#
+# Emulates only the aws surface the action uses:
+#   aws s3 sync s3://BUCKET/pool DEST -> copies $AWS_POOL_DIR (the bucket's pool/)
+#                                        into DEST when it is set and a directory,
+#                                        else does nothing (empty pool, first release)
+#
+# Anything else is unhandled (exit 1): the build only reads the bucket, it never
+# writes to it — action-web-server publishes.
+#
+# Every invocation is appended (one line, full argv) to $AWS_LOG so tests can assert
+# which subcommands ran and with which arguments. No network, no real AWS.
+set -euo pipefail
+
+: "${AWS_LOG:?AWS_LOG must point at a log file}"
+
+printf 'aws %s\n' "$*" >>"$AWS_LOG"
+
+case "${1:-} ${2:-}" in
+  "s3 sync")
+    if [ -n "${AWS_POOL_DIR:-}" ] && [ -d "$AWS_POOL_DIR" ]; then
+      mkdir -p "$4"
+      cp -R "$AWS_POOL_DIR/." "$4/"
+    fi
+    ;;
+  *) printf 'aws stub: unhandled argv: %s\n' "$*" >&2; exit 1 ;;
+esac

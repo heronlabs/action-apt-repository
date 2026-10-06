@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Minimal `sudo` stub for action-apt-repository offline tests.
+# Appends `sudo <argv>` to $SUDO_LOG, then runs argv unprivileged. Tests put a
+# fake apt-get first on PATH, so the real one is never reached.
+set -euo pipefail
+
+: "${SUDO_LOG:?SUDO_LOG must point at a log file}"
+
+printf 'sudo %s\n' "$*" >>"$SUDO_LOG"
+exec "$@"

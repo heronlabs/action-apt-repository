@@ -1,0 +1,40 @@
+name: 'Continuous Integration'
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 'Run shellcheck'
+        shell: bash
+        run: make lint
+
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: bats-core/bats-action@4.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: 'Install apt tooling'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends apt-utils gnupg
+
+      - name: 'Run bats tests'
+        shell: bash
+        run: make test

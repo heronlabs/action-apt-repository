@@ -1,0 +1,116 @@
+name: Apt Repository
+
+author: Heron Labs
+
+description: Build and sign a Debian apt repository from a release's .deb and publish it through heronlabs/action-web-server.
+
+branding:
+  icon: package
+  color: green
+
+inputs:
+  AWS_ROLE_TO_ASSUME:
+    description: ARN of the IAM role to assume via OIDC.
+    required: true
+  AWS_REGION:
+    description: AWS region where the S3 bucket and SSM parameters live.
+    required: true
+  AWS_ROLE_DURATION_SECONDS:
+    description: Duration in seconds for each assumed role session.
+    required: false
+    default: '900'
+  AWS_ENV_PATH:
+    description: SSM parameter path prefix holding the `APT_GPG_PRIVATE_KEY` parameter (e.g. /my-package/apt/).
+    required: true
+  BUCKET_NAME:
+    description: Destination S3 bucket name.
+    required: true
+  DISTRIBUTION_ID:
+    description: CloudFront distribution ID to invalidate after publishing.
+    required: true
+  PACKAGE:
+    description: Debian package name.
+    required: true
+  TAG:
+    description: Release of the calling repository that holds `<PACKAGE>_<version>_<ARCHITECTURE>.deb`.
+    required: true
+  ARCHITECTURE:
+    description: Debian architecture of the `.deb`.
+    required: false
+    default: amd64
+  SUITE:
+    description: Suite (and codename) of the repository.
+    required: false
+    default: stable
+  COMPONENT:
+    description: Component of the repository.
+    required: false
+    default: main
+  ORIGIN:
+    description: '`Origin` field of the Release file.'
+    required: true
+  LABEL:
+    description: '`Label` field of the Release file. Defaults to `PACKAGE`.'
+    required: false
+  GH_TOKEN:
+    description: Token used to download the release asset.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: 'Validate inputs'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        check() {
+            if ! [[ "$2" =~ $3 ]]; then
+                echo "$1 '$2' is invalid: it must match $3" >&2
+                exit 1
+            fi
+        }
+
+        check PACKAGE "${PACKAGE}" '^[a-z0-9][a-z0-9.+-]+$'
+        check ARCHITECTURE "${ARCHITECTURE}" '^[a-z0-9-]+$'
+        check SUITE "${SUITE}" '^[a-z0-9-]+$'
+        check COMPONENT "${COMPONENT}" '^[a-z0-9-]+$'
+
+        if [ -z "${TAG}" ]; then
+            echo "TAG is required" >&2
+            exit 1
+        fi
+      env:
+        PACKAGE: ${{ inputs.PACKAGE }}
+        ARCHITECTURE: ${{ inputs.ARCHITECTURE }}
+        SUITE: ${{ inputs.SUITE }}
+        COMPONENT: ${{ inputs.COMPONENT }}
+        TAG: ${{ inputs.TAG }}
+
+    # github.action_path in `with:` is this action's directory, and `env:` here
+    # reaches every step of action-web-server, its Build step included.
+    - name: 'Build and publish'
+      uses: heronlabs/action-web-server@v1
+      with:
+        AWS_ROLE_TO_ASSUME: ${{ inputs.AWS_ROLE_TO_ASSUME }}
+        AWS_REGION: ${{ inputs.AWS_REGION }}
+        AWS_ROLE_DURATION_SECONDS: ${{ inputs.AWS_ROLE_DURATION_SECONDS }}
+        AWS_ENV_PATH: ${{ inputs.AWS_ENV_PATH }}
+        BUCKET_NAME: ${{ inputs.BUCKET_NAME }}
+        DISTRIBUTION_ID: ${{ inputs.DISTRIBUTION_ID }}
+        BUILD_COMMAND: sh "${{ github.action_path }}/core/apt/build.sh"
+        BUILD_FOLDER: .apt-repository
+        # aws s3 patterns match across `/`: `*.gpg` covers <PACKAGE>.gpg and
+        # dists/<SUITE>/Release.gpg, and nothing under pool/ ends in .gpg.
+        NO_CACHE_PATTERNS: 'dists/*,*.gpg'
+      env:
+        APT_REPOSITORY_PACKAGE: ${{ inputs.PACKAGE }}
+        APT_REPOSITORY_TAG: ${{ inputs.TAG }}
+        APT_REPOSITORY_ARCHITECTURE: ${{ inputs.ARCHITECTURE }}
+        APT_REPOSITORY_SUITE: ${{ inputs.SUITE }}
+        APT_REPOSITORY_COMPONENT: ${{ inputs.COMPONENT }}
+        APT_REPOSITORY_ORIGIN: ${{ inputs.ORIGIN }}
+        APT_REPOSITORY_LABEL: ${{ inputs.LABEL || inputs.PACKAGE }}
+        APT_REPOSITORY_BUCKET_NAME: ${{ inputs.BUCKET_NAME }}
+        APT_REPOSITORY_GH_TOKEN: ${{ inputs.GH_TOKEN }}
