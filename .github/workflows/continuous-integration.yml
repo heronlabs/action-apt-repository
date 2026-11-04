@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: bats-core/bats-action@4.0.0
+      - uses: bats-core/bats-action@4.1.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
